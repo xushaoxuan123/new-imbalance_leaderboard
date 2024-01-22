@@ -1,0 +1,30 @@
+dataset: KineticSound
+model: AGM
+method: AGM
+n_classes: 31
+batch_size: 64
+epochs: 60
+optimizer: sgd
+learning_rate: 5e-5
+lr_decay_step: 30
+lr_decay_ratio: 0.1
+ckpt_path: log_ks
+train: true
+clip_grad: true
+use_tensorboard: ture
+tensorboard_path: log_ks
+random_seed: 1
+gpu_ids:
+  - 0
+  - 1
+  - 2
+  - 3
+
+expt_name: AGM
+fusion: concat
+grad_norm_clip: 0
+threshold: 0.99
+LAMBDA: 100
+modality: Multimodal
+modulation_starts: 20
+modulation_ends: 80
