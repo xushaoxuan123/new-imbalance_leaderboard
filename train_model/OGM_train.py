@@ -70,10 +70,11 @@ def OGM_main(args):
                                                                      train_dataloader, optimizer, scheduler,writer)
             acc, acc_a, acc_v, valid_loss = valid(args, model, device, test_dataloader)
             if args.use_tensorboard:
-                scalars_add(writer, epoch, batch_loss, valid_loss, batch_loss_a, batch_loss_v, acc, acc_a, acc_v)
+                writer = scalars_add(writer, epoch, batch_loss, valid_loss, batch_loss_a, batch_loss_v, acc, acc_a, acc_v)
 
 
             best_acc = train_performance(best_acc, acc_a, acc_v, batch_loss, valid_loss, args, acc, epoch, model.state_dict(), optimizer.state_dict(), scheduler.state_dict(),{'alpha':args.alpha})
+        writer.close()
 
     else:
         # first load trained model

@@ -88,8 +88,15 @@ def grad_amplitude_diff(v1, v2):
     return len_v1, len_v2, len_v1 - len_v2
 
 
+def clip(a, b, c):
+    if b<a:
+        return a
+    if c<b:
+        return c
+    return b
+
 def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
-                audio_proto, visual_proto, writer, logger):
+                audio_proto, visual_proto):
     criterion = nn.CrossEntropyLoss()
     softmax = nn.Softmax(dim=1)
     relu = nn.ReLU(inplace=True)
@@ -162,16 +169,14 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
             loss_proto_a = criterion(audio_sim, label)
             loss_proto_v = criterion(visual_sim, label)
 
-            if ratio_a_p > 1:
+            if ratio_a_p >= 1:
                 beta = 0  # audio coef
-                lam = 1 * args.alpha  # visual coef
-            elif ratio_a_p < 1:
-                beta = 1 * args.alpha
-                lam = 0
+                lam = 1 * clip(0, ratio_a_p - 1, 1)  # visual coef
             else:
-                beta = 0
+                beta = 1 * clip(0, 1/ratio_a_p - 1, 1)
                 lam = 0
-            loss = criterion(out, label) + beta * loss_proto_a + lam * loss_proto_v
+
+            loss = criterion(out, label) + args.alpha * beta * loss_proto_a + args.alpha * lam * loss_proto_v
             loss_v = criterion(out_v, label)
             loss_a = criterion(out_a, label)
         else:
@@ -188,7 +193,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
             score_a = sum([softmax(out_a)[i][label[i]] for i in range(out_a.size(0))])
             ratio_a = score_a / score_v
 
-        writer.add_scalar('loss/step', loss, (epoch - 1) * total_batch + step)
+        # writer.add_scalar('loss/step', loss, (epoch - 1) * total_batch + step)
 
         prediction = softmax(out)
         pred_a = softmax(out_a)
@@ -215,20 +220,22 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
             loss.backward()
         else:
             loss.backward()
-            logger.info('ratio: ', ratio_a, ratio_a_p)
+            # logger.info('ratio: ', ratio_a, ratio_a_p)
             a_angle = 0
             v_angle = 0
             _a_angle += a_angle
             _v_angle += v_angle
         # logger.info('loss: ', loss.data, 'loss_p_v: ', loss_proto_v.data, 'loss_p_a: ', loss_proto_a.data,
         #       'loss_v: ', loss_v.data, 'loss_a: ', loss_a.data)
-        if step % 100 == 0:
-            logger.info(
-                'EPOCH:[{:3d}/{:3d}]--STEP:[{:5d}/{:5d}]--{}--Loss:{:.4f}--lr:{}'.format(epoch, args.epochs, step,
-                                                                                         total_batch, 'Train',
-                                                                                         loss.item(),
-                                                                                         [group['lr'] for group in
-                                                                                          optimizer.param_groups]))
+            
+            #1111
+        # if step % 100 == 0:
+        #     logger.info(
+        #         'EPOCH:[{:3d}/{:3d}]--STEP:[{:5d}/{:5d}]--{}--Loss:{:.4f}--lr:{}'.format(epoch, args.epochs, step,
+        #                                                                                  total_batch, 'Train',
+        #                                                                                  loss.item(),
+        #                                                                                  [group['lr'] for group in
+        #                                                                                   optimizer.param_groups]))
 
         optimizer.step()
 
@@ -243,17 +250,14 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
     if args.optimizer == 'sgd':
         scheduler.step()
     # f_angle.close()
-    accuracy = sum(acc) / sum(num)
-    accuracy_a = sum(acc_a) / sum(num)
-    accuracy_v = sum(acc_v) / sum(num)
-    writer.add_scalars('Epoch Accuracy(train)', {'accuracy': accuracy,
-                                                 'accuracy audio': accuracy_a,
-                                                 'accuracy visual': accuracy_v}, epoch)
-    logger.info(
-        'EPOCH:[{:3d}/{:3d}]--{}--acc:{:.4f}--acc_a:{:.4f}--acc_v:{:.4f}-Alpha:{}'.format(epoch, args.epochs,
-                                                                                          'Train', accuracy,
-                                                                                          accuracy_a, accuracy_v,
-                                                                                          args.alpha))
+    # writer.add_scalars('Epoch Accuracy(train)', {'accuracy': accuracy,
+    #                                              'accuracy audio': accuracy_a,
+    #                                              'accuracy visual': accuracy_v}, epoch)
+    # logger.info(
+    #     'EPOCH:[{:3d}/{:3d}]--{}--acc:{:.4f}--acc_a:{:.4f}--acc_v:{:.4f}-Alpha:{}'.format(epoch, args.epochs,
+    #                                                                                       'Train', accuracy,
+    #                                                                                       accuracy_a, accuracy_v,
+    #                                                                                       args.alpha))
 
     return _loss / len(dataloader), _loss_a / len(dataloader), _loss_v / len(dataloader), \
            _loss_p_a / len(dataloader), _loss_p_v / len(dataloader), \

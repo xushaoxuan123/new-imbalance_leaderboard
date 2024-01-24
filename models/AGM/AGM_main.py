@@ -466,7 +466,7 @@ def AGM_main(args):
         cfgs.method, cfgs.optimizer, cfgs.dataset, cfgs.epochs, cfgs.batch_size, cfgs.learning_rate, cfgs.alpha)
     writer = SummaryWriter(os.path.join(writer_path, log_name))
 
-    for epoch in range(1, cfgs.epochs):
+    for epoch in range(cfgs.epochs):
         logger.info(f'Training for epoch {epoch}...')
         epoch_loss, epoch_score_a, epoch_score_v = train_epoch(model, train_dataloader, optimizer, scheduler, logger, cfgs, epoch, device, writer,
                                              epoch_score_a, epoch_score_v, audio_lr_ratio, visual_lr_ratio)

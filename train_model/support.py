@@ -15,13 +15,15 @@ def scalars_add(writer, epoch, batch_loss, val_loss, loss_a, loss_v, acc,acc_a, 
     writer.add_scalars('Evaluation', {'Total Accuracy': acc,
                                             'Audio Accuracy': acc_a,
                                             'Visual Accuracy': acc_v}, epoch)
+    return writer
     
-def save_model(args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,**paras):
+def save_model(args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,paras):
     if not os.path.exists(args.ckpt_path):
         os.mkdir(args.ckpt_path)
-    model_name = '{}_best_model_of_{}_opti_{}_batch_{}_lr_{}_.pth'.format(args.method, args.dataset,args.optimization, args.batch_size, args.learning_rate)
+    model_name = '{}_best_model_of_{}_opti_{}_batch_{}_lr_{}_'.format(args.method, args.dataset,args.optimizer, args.batch_size, args.learning_rate)
     for x,y in paras.items():
         model_name+='{}_{}_'.format(x,y)
+    model_name+='.pth'
 
     saved_dict = {'saved_epoch': epoch,
                     'fusion': args.fusion_method,
@@ -30,16 +32,16 @@ def save_model(args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,**pa
                     'optimizer': optimizer_dict,
                     'scheduler': scheduler_dict}
 
-    save_dir = os.path.join(args.log_path, model_name)
+    save_dir = os.path.join(args.ckpt_path, model_name)
 
     torch.save(saved_dict, save_dir)
     return save_dir
 
-def train_performance(best_acc, acc_a, acc_v, batch_loss, valid_loss, args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,**paras):
+def train_performance(best_acc, acc_a, acc_v, batch_loss, valid_loss, args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,paras):
     if acc > best_acc:
         best_acc = float(acc)
 
-        save_dir = save_model(args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,{'alpha':args.alpha, 'U':args.U, 'sigma':args.sigma, 'epsilon':args.eps})
+        save_dir = save_model(args, acc, epoch, model_dict, optimizer_dict, scheduler_dict,paras)
 
         print('The best model has been saved at {}.'.format(save_dir))
         print("Train Loss: {:.3f}, Valid Loss: {:.3f}, Acc: {:.3f}".format(batch_loss, valid_loss, acc))

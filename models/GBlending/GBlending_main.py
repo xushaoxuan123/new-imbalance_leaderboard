@@ -204,7 +204,7 @@ def super_epoch_origin(args, model, temp_model, device, train_dataloader, test_d
   weight_a /= sums
   weight_v /= sums
   weight_av /= sums
-
+  print('super finish')
   print(pre_a_loss_train, pre_v_loss_train, pre_av_loss_train)
   print(now_a_loss_train, now_v_loss_train, now_av_loss_train)
   return weight_a, weight_v, weight_av
@@ -223,7 +223,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, weight_a, wei
   _loss = 0
   _loss_a = 0
   _loss_v = 0
-  for step, (image, spec, label, index) in enumerate(dataloader):
+  for step, (image, spec, label,) in enumerate(dataloader):
     B = image.size()[0]
     optimizer.zero_grad()
 

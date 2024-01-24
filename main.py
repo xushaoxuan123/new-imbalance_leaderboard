@@ -67,7 +67,7 @@ def get_arguments():
     parser.add_argument('--tensorboard_path', default='/data/users/shaoxuan_xu/results/leaderboard/log/',
                         type=str, help='path to save tensorboard logs')
     parser.add_argument('--random_seed', default=0, type=int)
-    parser.add_argument('--gpu_ids', default='0',
+    parser.add_argument('--gpu_ids', default='1',
                         type=str, help='GPU ids')
     ##GBlending
     parser.add_argument('--super_epoch', default=10, type=int, help='the value of super_epoch')
