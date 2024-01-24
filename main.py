@@ -79,6 +79,10 @@ def get_arguments():
                         type=float, help='ACMo_eps')##### new
     parser.add_argument('--sigma', default='0.5',
                         type=float, help='ACMo_sigma')##### new
+    
+    ##CML
+    parser.add_argument('--lam', default='0.5',
+                        type=float, help='CML_lambda')##### new
     return parser.parse_args()
 
 
