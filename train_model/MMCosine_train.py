@@ -57,19 +57,19 @@ def MMCosine_main(args):
                 writer = scalars_add(writer, epoch, batch_loss, val_loss, batch_loss_a, batch_loss_v, acc, acc_a, acc_v)
             best_acc = train_performance(best_acc, acc_a, acc_v, batch_loss, val_loss, args, acc, epoch, model.state_dict(),optimizer.state_dict(),scheduler.state_dict(),{'scaling':args.scaling})
             writer.close()
-        else:
-            # first load trained model
-            loaded_dict = torch.load(args.ckpt_path)
-            # epoch = loaded_dict['saved_epoch']
-            fusion = loaded_dict['fusion']
-            state_dict = loaded_dict['model']
-            # optimizer_dict = loaded_dict['optimizer']
-            # scheduler = loaded_dict['scheduler']
+    else:
+        # first load trained model
+        loaded_dict = torch.load(args.ckpt_path)
+        # epoch = loaded_dict['saved_epoch']
+        fusion = loaded_dict['fusion']
+        state_dict = loaded_dict['model']
+        # optimizer_dict = loaded_dict['optimizer']
+        # scheduler = loaded_dict['scheduler']
 
-            assert fusion == args.fusion_method, 'inconsistency between fusion method of loaded model and args !'
+        assert fusion == args.fusion_method, 'inconsistency between fusion method of loaded model and args !'
 
-            model = model.load_state_dict(state_dict)
-            print('Trained model loaded!')
+        model = model.load_state_dict(state_dict)
+        print('Trained model loaded!')
 
-            acc, acc_a, acc_v = valid(args, model, device, test_dataloader, epoch=1001)
-            print('Accuracy: {}, accuracy_a: {}, accuracy_v: {}'.format(acc, acc_a, acc_v))
+        acc, acc_a, acc_v = valid(args, model, device, test_dataloader, epoch=1001)
+        print('Accuracy: {}, accuracy_a: {}, accuracy_v: {}'.format(acc, acc_a, acc_v))
