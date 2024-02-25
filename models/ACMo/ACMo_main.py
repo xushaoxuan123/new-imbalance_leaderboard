@@ -31,6 +31,9 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,l_t
     np.random.shuffle(mask_t)
     mask_t = torch.from_numpy(mask_t)
     mask_t = mask_t.to(device)
+    mask_none = np.ones(U)
+    mask_none = torch.from_numpy(mask_none)
+    mask_none = mask_none.to(device)
     _loss = 0
     _loss_a = 0
     _loss_v = 0
@@ -50,8 +53,10 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,l_t
         optimizer.zero_grad()
 
         # TODO: make it simpler and easier to extend
-
-        _, _, out_a, out_v, out_co = model(spec.unsqueeze(1).float(), image.float(), mask_t ,dependent_modality,pt)
+        if args.modulation_starts<= epoch <= args.modulation_ends:
+            _, _, out_a, out_v, out_co = model(spec.unsqueeze(1).float(), image.float(), mask_t ,dependent_modality,pt)
+        else:
+            _, _, out_a, out_v, out_co = model(spec.unsqueeze(1).float(), image.float(), mask_none ,'none',pt)
 
         # if args.fusion_method == 'sum':
         #     out_v = (torch.mm(v, torch.transpose(model.module.fusion_module.fc_y.weight, 0, 1)) +
@@ -74,37 +79,6 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,l_t
         loss_a.backward()
         
 
-        if args.fusion_method == 'Normal':
-            # no modulation, regular optimization
-            pass
-        else:
-            # Modulation starts here !
-            score_v = sum([softmax(out_v)[i][label[i]] for i in range(out_v.size(0))])
-            score_a = sum([softmax(out_a)[i][label[i]] for i in range(out_a.size(0))])
-
-            ratio_v = score_v / score_a
-            ratio_a = 1 / ratio_v
-
-            """
-            Below is the Eq.(10) in our CVPR paper:
-                    1 - tanh(alpha * rho_t_u), if rho_t_u > 1
-            k_t_u =
-                    1,                         else
-            coeff_u is k_t_u, where t means iteration steps and u is modality indicator, either a or v.
-            """
-
-            if ratio_v > 1:
-                coeff_v = 1 - tanh(args.alpha * relu(ratio_v))
-                coeff_a = 1
-            else:
-                coeff_a = 1 - tanh(args.alpha * relu(ratio_a))
-                coeff_v = 1
-
-            if args.use_tensorboard:
-                iteration = epoch * len(dataloader) + step
-                writer.add_scalar('data/ratio v', ratio_v, iteration)
-                writer.add_scalar('data/coefficient v', coeff_v, iteration)
-                writer.add_scalar('data/coefficient a', coeff_a, iteration)
 
             # if args.modulation_starts <= epoch <= args.modulation_ends: # bug fixed
             #     for name, parms in model.named_parameters():

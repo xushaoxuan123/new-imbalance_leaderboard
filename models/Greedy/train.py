@@ -70,6 +70,7 @@ def train(save_path, wd, lr, momentum, batch_size, callbacks=[]):
 
 
 def Greedy_main(args):
+    logging.basicConfig() #
     ts = time.strftime('%Y_%m_%d %H:%M:%S', time.localtime())
     save_path = os.path.join(args.ckpt_path, f"{ts}_Greedy")
     if not os.path.exists(save_path):

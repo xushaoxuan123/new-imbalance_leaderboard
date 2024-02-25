@@ -265,7 +265,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, scheduler,
            _ratio_a / len(dataloader), _ratio_a_p / len(dataloader), _a_diff / len(dataloader), _v_diff / len(dataloader)
 
 
-def valid(args, model, device, dataloader, audio_proto, visual_proto, epoch, writer, logger):
+def valid(args, model, device, dataloader, audio_proto, visual_proto, epoch):
     softmax = nn.Softmax(dim=1)
     criterion = nn.CrossEntropyLoss()
     n_classes = 31
@@ -344,29 +344,29 @@ def valid(args, model, device, dataloader, audio_proto, visual_proto, epoch, wri
                 if np.asarray(label[i].cpu()) == a_p:
                     acc_a_p[label[i]] += 1.0
 
-            if step % 20 == 0:
-                logger.info('EPOCH:[{:03d}/{:03d}]--STEP:[{:05d}/{:05d}]--{}--loss:{}'.format(epoch, args.epochs, step,
-                                                                                              total_batch, 'Validate',
-                                                                                              loss))
+            # if step % 20 == 0:
+            #     logger.info('EPOCH:[{:03d}/{:03d}]--STEP:[{:05d}/{:05d}]--{}--loss:{}'.format(epoch, args.epochs, step,
+            #                                                                                   total_batch, 'Validate',
+            #                                                                                   loss))
 
     accuracy = sum(acc) / sum(num)
     accuracy_a = sum(acc_a) / sum(num)
     accuracy_v = sum(acc_v) / sum(num)
-    writer.add_scalars('Accuracy(Test)', {'accuracy': accuracy,
-                                          'audio_accuracy': accuracy_a,
-                                          'visual accuracy': accuracy_v}, epoch)
+    # writer.add_scalars('Accuracy(Test)', {'accuracy': accuracy,
+    #                                       'audio_accuracy': accuracy_a,
+    #                                       'visual accuracy': accuracy_v}, epoch)
 
     model.mode = 'train'
     end_time = time.time()
     elapse_time = end_time - start_time
-    logger.info(
-        'EPOCH:[{:03d}/{:03d}]--{}--Elapse time:{:.2f}--Accuracy:{:.4f}--acc_a:{:.4f}--acc_v:{:.4f}'.format(epoch,
-                                                                                                            args.epochs,
-                                                                                                            'Validate',
-                                                                                                            elapse_time,
-                                                                                                            accuracy,
-                                                                                                            accuracy_a,
-                                                                                                            accuracy_v))
+    # logger.info(
+    #     'EPOCH:[{:03d}/{:03d}]--{}--Elapse time:{:.2f}--Accuracy:{:.4f}--acc_a:{:.4f}--acc_v:{:.4f}'.format(epoch,
+    #                                                                                                         args.epochs,
+    #                                                                                                         'Validate',
+    #                                                                                                         elapse_time,
+    #                                                                                                         accuracy,
+    #                                                                                                         accuracy_a,
+    #                                                                                                         accuracy_v))
 
     return sum(acc) / sum(num), sum(acc_a) / sum(num), sum(acc_v) / sum(num), sum(acc_a_p) / sum(num), sum(acc_v_p) / sum(num), _loss/sum(num)
 

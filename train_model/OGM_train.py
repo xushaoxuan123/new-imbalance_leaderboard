@@ -15,7 +15,7 @@ from models.OGM.OGM_AVC import AVClassifier
 from utils.utils import setup_seed, weight_init
 from models.OGM.OGM_main import train_epoch, valid
 
-from train_model.support import ts_init, scalars_add, train_performance
+from train_model.support import ts_init, scalars_add, train_performance, Dataloader_build, Optimizer_build
 def OGM_main(args):
     print(args)
     setup_seed(args.random_seed)
@@ -33,30 +33,10 @@ def OGM_main(args):
 
     model.cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, args.lr_decay_step, args.lr_decay_ratio)
+    optimizer, scheduler = Optimizer_build(args, model)
 
-    # if args.dataset == 'VGGSound':
-    #     train_dataset = VGGSound(args, mode='train')
-    #     test_dataset = VGGSound(args, mode='test')
-    if args.dataset == 'KineticSound':
-        train_dataset = AVDataset(mode='train')
-        test_dataset = AVDataset(mode='test')
-    elif args.dataset == 'CREMAD':
-        train_dataset = CramedDataset(mode='train')
-        test_dataset = CramedDataset(mode='test')
-    elif args.dataset == 'AVE':
-        train_dataset = AVDataset(mode='train')
-        test_dataset = AVDataset(mode='test')
-    else:
-        raise NotImplementedError('Incorrect dataset name {}! '
-                                  'Only support VGGSound, KineticSound and CREMA-D for now!'.format(args.dataset))
+    train_dataloader, test_dataloader, _ = Dataloader_build(args)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size,
-                                  shuffle=True, num_workers=32, pin_memory=True)
-
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size,
-                                 shuffle=False, num_workers=32, pin_memory=True)
 
     if args.train:
 

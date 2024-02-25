@@ -22,7 +22,7 @@ class MMTM_mitigate(nn.Module):
             SEonly=False, 
             shareweight=False):
         super(MMTM_mitigate, self).__init__()
-        dim = dim_visual + dim_skeleton
+        dim = dim_visual * 3 + dim_skeleton  # *3 in KSdataset
         dim_out = int(2*dim/ratio)
         self.SEonly = SEonly
         self.shareweight = shareweight
@@ -92,7 +92,10 @@ class MMTM_mitigate(nn.Module):
 
             else: 
                 squeeze_array = []
-                for tensor in [visual, skeleton]:
+
+                ##KS if dataset == 'Ks'
+                visual1 = torch.chunk(visual, 3,dim = 0)
+                for tensor in [visual1[0],visual1[1],visual1[2], skeleton]:
                     tview = tensor.view(tensor.shape[:2] + (-1,))
                     squeeze_array.append(torch.mean(tview, dim=-1))
 
@@ -109,7 +112,6 @@ class MMTM_mitigate(nn.Module):
 
         vis_out = self.sigmoid(vis_out)
         sk_out = self.sigmoid(sk_out)
-
         self.running_avg_weight_visual = (vis_out.mean(0) + self.running_avg_weight_visual*self.step).detach()/(self.step+1)
         self.running_avg_weight_skeleton = (vis_out.mean(0) + self.running_avg_weight_skeleton*self.step).detach()/(self.step+1)
         
@@ -127,17 +129,15 @@ class MMTM_mitigate(nn.Module):
 
         if not curation_mode:
             dim_diff = len(visual.shape) - len(vis_out.shape)
-            vis_out = vis_out.view(vis_out.shape + (1,) * dim_diff)
-
-            dim_diff = len(skeleton.shape) - len(sk_out.shape)
+            vis_out = vis_out.view(vis_out.shape + (1,) * dim_diff)      
+            dim_diff = len(skeleton.shape) - len(sk_out.shape)     
             sk_out = sk_out.view(sk_out.shape + (1,) * dim_diff)
         
         else:
             if caring_modality==0:
                 dim_diff = len(skeleton.shape) - len(sk_out.shape)
                 sk_out = sk_out.view(sk_out.shape + (1,) * dim_diff)
-
-                dim_diff = len(visual.shape) - len(vis_out.shape)
+                dim_diff = len(visual.shape) - len(vis_out.shape) #
                 vis_out = torch.stack(vis_out.shape[0]*[
                         self.running_avg_weight_visual
                     ]).view(vis_out.shape + (1,) * dim_diff)
@@ -150,8 +150,8 @@ class MMTM_mitigate(nn.Module):
                 sk_out = torch.stack(sk_out.shape[0]*[
                         self.running_avg_weight_skeleton
                     ]).view(sk_out.shape + (1,) * dim_diff)
-
-        return visual * vis_out, skeleton * sk_out, scales, squeeze_array
+        vis_out = vis_out.repeat(3,1,1,1)  ##KS
+        return (visual * vis_out), skeleton * sk_out, scales, squeeze_array
 
 
 def get_mmtm_outputs(eval_save_path, mmtm_recorded, key):

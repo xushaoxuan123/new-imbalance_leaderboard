@@ -1,4 +1,4 @@
-from train_model.support import ts_init, scalars_add, train_performance
+from train_model.support import ts_init, scalars_add, train_performance, Dataloader_build, Optimizer_build
 import torch
 from models.models import AVClassifier_ACMo 
 import torch.nn as nn
@@ -14,6 +14,8 @@ from models.ACMo.ACMo_main import train_epoch, valid
 import os
 def ACMo_main(args):
     #print(args)
+    setup_seed(args.random_seed)
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
 
     gpu_ids = list(range(torch.cuda.device_count()))
 
@@ -22,36 +24,18 @@ def ACMo_main(args):
     model = AVClassifier_ACMo(args)
 
     model.apply(weight_init)
-   
 
     model = torch.nn.DataParallel(model, device_ids=gpu_ids)
 
     model.cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, args.lr_decay_step, args.lr_decay_ratio)
+    optimizer, scheduler = Optimizer_build(args, model)
 
     # if args.dataset == 'VGGSound':
     #     train_dataset = VGGSound(args, mode='train')
     #     test_dataset = VGGSound(args, mode='test')
-    if args.dataset == 'KineticSound':
-        train_dataset = AV_KS_Dataset(mode='train')
-        test_dataset = AV_KS_Dataset(mode='test')
-    elif args.dataset == 'CREMAD':
-        train_dataset = CramedDataset(mode='train')
-        test_dataset = CramedDataset(mode='test')
-    elif args.dataset == 'AVE':
-        train_dataset = AV_KS_Dataset(mode='train')
-        test_dataset = AV_KS_Dataset(mode='test')
-    else:
-        raise NotImplementedError('Incorrect dataset name {}! '
-                                  'Only support VGGSound, KineticSound and CREMA-D for now!'.format(args.dataset))
-
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size,
-                                  shuffle=True, num_workers=32, pin_memory=True)
-
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size,
-                                 shuffle=False, num_workers=32, pin_memory=True)
+    train_dataloader, test_dataloader, valid_dataloader = DataLoader(args)
+    
 
     if args.train:
 

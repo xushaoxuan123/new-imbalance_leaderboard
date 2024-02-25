@@ -12,44 +12,11 @@ import torch.nn.functional as F
 from dataset.av_dataset import AV_KS_Dataset
 from models.models import AVClassifier
 from utils.utils import setup_seed, weight_init, re_init,get_logger, accuracy
-
+from models.Loss import NCELoss
 EPISILON = 1e-10
 
 # todo add logger
 # NCE loss is used in supplementary material 蒸馏损失
-class NCELoss(torch.nn.Module):
-    def __init__(self, temperature=0.1):
-        super(NCELoss, self).__init__()
-        self.temperature = temperature
-        self.softmax = nn.Softmax(dim=1)
-
-    def where(self, cond, x_1, x_2):
-        cond = cond.type(torch.float32)
-        return (cond * x_1) + ((1 - cond) * x_2)
-
-    def forward(self, f1, f2, targets):
-        ### cuda implementation
-        f1 = F.normalize(f1, dim=1)
-        f2 = F.normalize(f2, dim=1)
-
-        ## set distances of the same label to zeros
-        mask = targets.unsqueeze(1) - targets
-        self_mask = (torch.zeros_like(mask) != mask).float()  ### where the negative samples are labeled as 1
-        dist = (f1.unsqueeze(1) - f2).pow(2).sum(2)
-
-        ## convert l2 distance to cos distance
-        cos = 1 - 0.5 * dist
-
-        ## convert cos distance to exponential space
-        pred_softmax = self.softmax(cos / self.temperature)  ### convert to multi-class prediction scores
-
-        log_pos_softmax = - torch.log(pred_softmax + EPISILON) * (1 - self_mask.float())
-        log_neg_softmax = - torch.log(1 - pred_softmax + EPISILON) * self_mask.float()
-        log_softmax = log_pos_softmax.sum(1) / (1 - self_mask).sum(1).float() + log_neg_softmax.sum(1) / self_mask.sum(
-            1).float()
-        loss = log_softmax
-
-        return loss.mean()
 
 def train_epoch(args, epoch, model, device, dataloader, optimizer, writer, logger=None):
     criterion = nn.CrossEntropyLoss()
@@ -57,7 +24,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, writer, logge
     relu = nn.ReLU(inplace=True)
     tanh = nn.Tanh()
     n_classes = 31
-    NCE = NCELoss()
+    NCE = NCELoss(args.temperature, args.EPISILON)
     model.train()
     print("Start training ... ")
 
@@ -135,7 +102,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer, writer, logge
     return _loss / len(dataloader), _loss_a / len(dataloader), _loss_v / len(dataloader), sum(acc) / sum(num), sum(acc_a) / sum(num), sum(acc_v) / sum(num)
 
 
-def valid(args, model, device, dataloader, epoch, logger=None):
+def valid(args, model, device, dataloader):
     softmax = nn.Softmax(dim=1)
     n_classes = 31 # KS_dataset
     count = 0
@@ -143,6 +110,10 @@ def valid(args, model, device, dataloader, epoch, logger=None):
     acc_v = 0.
     acc_a = 0.
 
+    criterion = nn.CrossEntropyLoss()
+    loss = 0
+    valid_loss = 0
+    NCE = NCELoss(args.temperature, args.EPISILON)
     with torch.no_grad():
         model.eval()
         # TODO: more flexible
@@ -169,17 +140,19 @@ def valid(args, model, device, dataloader, epoch, logger=None):
                          model.head.bias / 2)
                 out_v = (torch.mm(v, torch.transpose(model.head.weight[:, 512:], 0, 1)) +
                          model.head.bias / 2)
-
+            nce_loss = NCE(a, v, label)
+            loss = criterion(out, label) + args.lam * nce_loss
+            
+            valid_loss += loss
             acc += accuracy(out, label)*label.shape[0]
             acc_a += accuracy(out_a, label)*label.shape[0]
             acc_v += accuracy(out_v, label)*label.shape[0]
             count += label.shape[0]
 
-    return acc/count, acc_a/count, acc_v/count
+    return acc/count, acc_a/count, acc_v/count, valid_loss/count
 
 
 def MMCosine_main(args):
-    args.scaling = args.alpha  # scaling measn alpha
     args.lam = 0 # 不用蒸馏 for fair
     print(args)
     setup_seed(args.random_seed)
@@ -244,9 +217,9 @@ def MMCosine_main(args):
             writer.add_scalars('Train', {'Total Accuracy': acc,
                                               'Audio Accuracy': acc_a,
                                               'Visual Accuracy': acc_v}, epoch)
-
+            print('train_loss:',acc)
             scheduler.step()
-            acc, acc_a, acc_v = valid(args, model, device, val_dataloader, epoch)
+            acc, acc_a, acc_v, valid_loss = valid(args, model, device, val_dataloader)
 
             writer.add_scalars('Loss', {'Total Loss': batch_loss,
                                         'Audio Loss': batch_loss_a,
@@ -275,8 +248,8 @@ def MMCosine_main(args):
 
                 save_dir = os.path.join(args.ckpt_path, model_name)
 
-                torch.save(saved_dict, save_dir)
-                logger.info('The best model has been saved at {}.'.format(save_dir))
+                # torch.save(saved_dict, save_dir)
+                # logger.info('The best model has been saved at {}.'.format(save_dir))
                 logger.info("Loss: {:.4f}, Acc: {:.4f}, Acc_a:{:.4f}, Acc_v:{:.4f}".format(batch_loss, acc, acc_a, acc_v))
             else:
                 logger.info("Loss: {:.4f}, Acc: {:.4f}, Best Acc: {:.4f}, Acc_a:{:.4f}, Acc_v:{:.4f}".format(batch_loss, acc,

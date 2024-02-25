@@ -1,7 +1,7 @@
 
 from torch.optim import SGD,AdamW,Adam,lr_scheduler
 from dataset.av_dataset import AV_KS_Dataset
-from models.AGM.AGM_net import GradMod
+from models.models import GradMod
 from torch.utils.data import DataLoader
 
 
@@ -40,7 +40,7 @@ class AGM_task(object):
     def build_loader(self):
         train_dataset = AV_KS_Dataset(mode="train")
         train_dataloader = DataLoader(train_dataset, batch_size=self.cfgs.batch_size,
-                                  shuffle=True, num_workers=32, pin_memory=True)
+                                  shuffle=True, pin_memory=False)
         valid_dataloader = DataLoader(AV_KS_Dataset(mode="val"), batch_size=self.cfgs.batch_size,
                                   shuffle=True, num_workers=32, pin_memory=True)
 

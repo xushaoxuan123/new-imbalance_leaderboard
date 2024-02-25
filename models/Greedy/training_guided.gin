@@ -19,9 +19,9 @@ Bias_Mitigation_Strong.MMTMnames = ['visual', 'skeleton']
 ProgressionCallback.other_metrics=['acc_modal_0', 'acc_modal_1', 'val_acc_modal_0', 'val_acc_modal_1', 'd_BDR', 'curation_mode', 'caring_modality']
 
 
-# Training loop
+# Training loop ;changed epochs
 training_loop.nummodalities=2
-training_loop.n_epochs=80
+training_loop.n_epochs=100
 training_loop.use_gpu=True
 training_loop.device_numbers=[0]
 training_loop.checkpoint_monitor='val_acc'

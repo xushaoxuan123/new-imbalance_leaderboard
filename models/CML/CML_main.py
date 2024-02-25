@@ -19,12 +19,12 @@ from tqdm import tqdm
 import argparse
 
 def conf_loss(conf, pred, conf_x, pred_x, label):
-    print(conf.shape, pred.shape, conf_x.shape, pred_x.shape, label.shape)
+    #print(conf.shape, pred.shape, conf_x.shape, pred_x.shape, label.shape)
     # sign==1 => ( pred false || pred_x true)
     # sign == 0 => pred true and prex , 此时loss取0
     sign = (~((pred == label) & (pred_x != label))).long()  # trick 1
-    print(sign)
-    return (max(0, torch.sub(conf_x, conf))).sum(), sign.sum()
+    #print(sign)
+    return (max(0, torch.sub(conf_x, conf).sum())), sign.sum()
 
 
 
@@ -47,11 +47,14 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer):
     conf_loss_hit_a = 0
     conf_loss_hit_v = 0
     
-    optimizer.zero_grad()
-    for step, (images, spec, label) in tqdm(enumerate(dataloader)):
+    
+    for step, (images, spec, label) in enumerate(dataloader):
         images = images.to(device)
         spec = spec.to(device)
         label = label.to(device)
+        optimizer.zero_grad()
+        # print(images.shape)
+
         out, out_a, out_v = model(spec.unsqueeze(1).float(), images.float())
 
         loss_mm = criterion(out, label)
@@ -66,8 +69,9 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer):
         pred_a = F.softmax(out_a, dim=1)
         pred_v = F.softmax(out_v, dim=1)
 
-        loss = loss_mm.item()
-        if args.modulation_starts <= epoch <= args.modulation_ends:
+        loss = loss_mm
+        if args.modulation_starts <= epoch <= args.modulation_ends: ######
+        # if args.modulation_starts <= epoch <= args.modulation_ends: ######
             flag = randint(0,1)
             conf, pred = torch.max(prediction, dim=1)
             if flag:
@@ -83,9 +87,13 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer):
                 loss += loss_v
                 _loss_c += loss_vc
             loss = loss / 2
-        _loss += loss
-        _loss_a += loss_a
-        _loss_v += loss_v
+        loss.backward()
+        _loss += loss.item()
+        _loss_a += loss_a.item()
+        _loss_v += loss_v.item()
+        _loss += lam * _loss_c
+        optimizer.step()
+        ## optim work
         # acc
 
 
@@ -103,7 +111,7 @@ def train_epoch(args, epoch, model, device, dataloader, optimizer):
     #                                              'v conf hit ratio': conf_hit_ratio_v}, epoch)
 
     # logger.info(f'conf loss hit ratio audio: {conf_hit_ratio_a}, visual: {conf_hit_ratio_v}')
-        _loss += lam * _loss_c
+        
     return _loss / len(dataloader), loss_a / len(dataloader), loss_v / len(dataloader)
 
 
@@ -121,7 +129,7 @@ def valid(args, model, device, dataloader):
         acc_a = [0.0 for _ in range(n_classes)]
         acc_v = [0.0 for _ in range(n_classes)]
 
-        for step, (images, spec, label) in tqdm(enumerate(dataloader)):
+        for step, (images, spec, label) in enumerate(dataloader):
             spec = spec.to(device)
             images = images.to(device)
             label = label.to(device)

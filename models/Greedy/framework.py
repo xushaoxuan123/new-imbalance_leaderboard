@@ -85,14 +85,15 @@ class StepIterator:
             return np.concatenate(self.indices_list, axis=0)
 
     def __iter__(self):
-        for batch_ind, data in _get_step_iterator(self.steps_per_epoch, self.generator):
+        ## 修改数据集 image spec label
+        for batch_ind, (data,data1,data2) in _get_step_iterator(self.steps_per_epoch, self.generator):
             batch_begin_time = timeit.default_timer()
             self.callback.on_batch_begin(batch_ind, {})
             self.callback.on_forward_begin(batch_ind, data) 
 
             step_data = {'number': batch_ind}
-            step_data['indices'] = data[0]
-            yield step_data, data[1:]
+            step_data['indices'] = [data,data1,data2]
+            yield step_data, (data, data1,data2)
 
             self.losses_sum += step_data['loss'] * step_data['size']
             self.metrics_sum += step_data['metrics'] * step_data['size']
@@ -137,13 +138,13 @@ class Model_:
         self.curation_mode=False
         self.caring_modality=None
 
-    def _compute_loss_and_metrics(self, x, y):
-        x, y = self._process_input(x, y)
-        x = x if isinstance(x, (list, tuple)) else (x, )
+    def _compute_loss_and_metrics(self, image, spec, y):
+        # x, y = self._process_input(x, y)
+        # x = x if isinstance(x, (list, tuple)) else (x, )
 
-        self.minibatch_data = (x, y)
+        # self.minibatch_data = (x, y)
 
-        pred_y_eval, pred_y, scales, squeezed_mps  = self.model(*x, 
+        pred_y_eval, pred_y, scales, squeezed_mps  = self.model(image, spec,  
             curation_mode=self.curation_mode, 
             caring_modality=self.caring_modality)
 
@@ -231,9 +232,11 @@ class Model_:
 
         self.model.eval()
         with torch.no_grad():
-            for step, (x, y) in step_iterator:
-                step['size'] = self._get_batch_size(x, y)
-                loss_tensor, info = self._compute_loss_and_metrics(x, y)
+            for step, (image, spec, y) in step_iterator:
+                step['size'] = self._get_batch_size(image, y)
+                device = 'cuda:0'
+                y = y.to(device)
+                loss_tensor, info = self._compute_loss_and_metrics(image.float(), spec.unsqueeze(1).float(), y)
                 step['loss'] = float(loss_tensor)
                 step.update(info)
 
@@ -304,11 +307,14 @@ class Model_:
                                                )
             self.model.train(True)
             with torch.enable_grad():
-                for step, (x, y) in train_step_iterator: 
-                    step['size'] = self._get_batch_size(x, y)
-
+                #for step, (image, spec, label) in enumerate(train_generator): 
+                for step, (image, spec, label) in train_step_iterator:
+                    step['size'] = self._get_batch_size(image, label)
+                    
+                    device = 'cuda:0'
+                    label = label.to(device)
                     self.optimizer.zero_grad()
-                    loss_tensor, info = self._compute_loss_and_metrics(x, y)
+                    loss_tensor, info = self._compute_loss_and_metrics(image.float(), spec.unsqueeze(1).float(), label)
 
                     loss_tensor.backward()
                     callback_list.on_backward_end(step['number'])
@@ -320,6 +326,7 @@ class Model_:
                     
                     if math.isnan(step['loss']): 
                         self.stop_training = True
+                   
 
             train_dict = {'loss': train_step_iterator.loss, 
                     'train_indices': train_step_iterator.indices,

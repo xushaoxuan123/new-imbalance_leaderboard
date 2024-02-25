@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from fusions.fusion_method import SumFusion, ConcatFusion, FiLM, GatedFusion
 from .backbone import resnet18
-
+from models.module_base import MaxOut_MLP, MLP
 
 class ConcatFusion(nn.Module):
     def __init__(self, input_dim=1024+512, output_dim=100):
@@ -148,7 +148,7 @@ class AVClassifier(nn.Module):
 
 
         self.dataset = args.dataset
-
+        self.alpha = nn.Parameter(torch.tensor(0.5))  ## used for CKF to learn
         self.audio_net = resnet18(modality='audio')
         self.visual_net = resnet18(modality='visual')
 
@@ -174,11 +174,13 @@ class AVClassifier(nn.Module):
 
         a = torch.flatten(a, 1)
         v = torch.flatten(v, 1)
-
+        if self.method == 'CKF':
+            out = self.alpha * self.head_audio(a) +(1- self.alpha) * self.head_video(v)
+            return a, v, out
         out = torch.cat((a,v),1)
         out = self.head(out)
 
-        if self.method == 'MMCosine' or self.method == 'CML':
+        if self.method == 'MMCosine' or self.method == 'CML' or self.method == 'MSBD' or self.method == 'UNM':
             return out, a, v
         if self.method == 'PMR':
             return a, v, out
@@ -188,6 +190,69 @@ class AVClassifier(nn.Module):
 
         return out, out_audio, out_video
 
+class AClassifier(nn.Module):
+    def __init__(self,args):
+        super(AClassifier, self).__init__()
+
+        if args.dataset == 'VGGSound':
+            n_classes = 309
+        elif args.dataset == 'KineticSound':
+            n_classes = 31
+        elif args.dataset == 'CREMAD':
+            n_classes = 6
+        elif args.dataset == 'AVE':
+            n_classes = 28
+        else:
+            raise NotImplementedError('Incorrect dataset name {}'.format(args.dataset))
+        self.dataset = args.dataset
+
+        self.audio_net = resnet18(modality='audio')
+        self.head_audio = nn.Linear(512, n_classes)
+    
+    def forward(self, audio):
+        a = self.audio_net(audio)
+        a = F.adaptive_avg_pool2d(a, 1)
+        a = torch.flatten(a, 1)
+        out = self.head_audio(a)
+        return out ,a
+        
+class VClassifier(nn.Module):
+    def __init__(self,args):
+        super(VClassifier, self).__init__()
+
+        if args.dataset == 'VGGSound':
+            n_classes = 309
+        elif args.dataset == 'KineticSound':
+            n_classes = 31
+        elif args.dataset == 'CREMAD':
+            n_classes = 6
+        elif args.dataset == 'AVE':
+            n_classes = 28
+        else:
+            raise NotImplementedError('Incorrect dataset name {}'.format(args.dataset))
+        self.dataset = args.dataset
+        self.args = args
+        self.visual_net = resnet18(modality='visual')
+        self.head_visual = nn.Linear(512, n_classes)
+    
+    def forward(self, visual):
+        if self.dataset != 'CREMAD':
+            visual = visual.permute(0, 2, 1, 3, 4).contiguous()
+       
+        v = self.visual_net(visual)
+
+        (_, C, H, W) = v.size()
+        B = int(v.size()[0]/3)
+        v = v.view(B, -1, C, H, W)
+        v = v.permute(0, 2, 1, 3, 4)
+
+        v = F.adaptive_avg_pool3d(v, 1)
+ 
+        v = torch.flatten(v, 1)
+
+        out = self.head_visual(v)
+        return out ,v
+    
 
 class AVClassifier_OGM(nn.Module):
     def __init__(self, args):
@@ -538,3 +603,168 @@ class AVClassifier_ACMo(nn.Module):
 
 
         return _a,_v,out_a,out_v,out_co
+    
+class Modality_Visual(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, total_out, pad_visual_out, pad_audio_out):
+        return 0.5 * (total_out - pad_visual_out + pad_audio_out)
+
+
+class Modality_Audio(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, total_out, pad_visual_out, pad_audio_out):
+        return 0.5 * (total_out - pad_audio_out + pad_visual_out)
+
+class AV_Early_Classifier(nn.Module):
+    """Using Resnet as muliti-modal encoder for early-fusion model.
+
+    Args:
+        nn (_type_): _description_
+    """
+
+    def __init__(self, args):
+        super(AV_Early_Classifier, self).__init__()
+        self.mode = "classify"
+        self.args = args
+        self.audio_net = resnet18(modality='audio')
+        self.visual_net = resnet18(modality='visual')
+        self.mm_encoder = MaxOut_MLP(6, 2048, 1024, 1024, linear_layer=False)
+        self.head = MLP(1024, 128, 6, one_layer=True)
+
+    def forward(self, audio, visual, pad_audio=False, pad_visual=False):
+        if pad_audio:
+            audio = torch.zeros_like(audio, device=audio.device)
+
+        if pad_visual:
+            visual = torch.zeros_like(visual, device=visual.device)
+
+        a = self.audio_net(audio)
+        v = self.visual_net(visual)
+        (T, C, H, W) = v.size()
+        B = a.size()[0]
+        v = v.view(B, -1, C, H, W)
+        v = v.permute(0, 2, 1, 3, 4)
+
+        a = F.adaptive_avg_pool2d(a, 1)
+        v = F.adaptive_avg_pool3d(v, 1)
+        a = torch.flatten(a, 1)
+        v = torch.flatten(v, 1)
+
+        encoded_out = torch.cat([a, v], dim=1)
+        feature = self.mm_encoder(encoded_out)
+        out = self.head(feature)
+        if self.mode == "feature":
+            return out, feature
+        return out
+    
+class AV_Late_Classifier(nn.Module):
+    """Using Resnet as muliti-modal encoder for early-fusion model.
+
+    Args:
+        nn (_type_): _description_
+    """
+
+    def __init__(self, args):
+        super(AV_Late_Classifier, self).__init__()
+        self.mode = "classify"
+        self.args = args
+        self.audio_net = resnet18(modality='audio')
+        self.visual_net = resnet18(modality='visual')
+        self.mm_encoder = MaxOut_MLP(6, 2048, 1024, 1024, linear_layer=False)
+        # self.head = MLP(1024, 128, 6, one_layer=True)
+        self.head = MLP(1024, 128, 31, one_layer=True)
+
+    def forward(self, audio, visual, pad_audio=False, pad_visual=False):
+        if pad_audio:
+            audio = torch.zeros_like(audio, device=audio.device)
+
+        if pad_visual:
+            visual = torch.zeros_like(visual, device=visual.device)
+
+        a = self.audio_net(audio)
+        v = self.visual_net(visual)
+        (T, C, H, W) = v.size()
+        B = a.size()[0]
+        v = v.view(B, -1, C, H, W)
+        v = v.permute(0, 2, 1, 3, 4)
+
+        a = F.adaptive_avg_pool2d(a, 1)
+        v = F.adaptive_avg_pool3d(v, 1)
+        a = torch.flatten(a, 1)
+        v = torch.flatten(v, 1)
+
+        encoded_out = torch.cat([a, v], dim=1)
+        feature = self.mm_encoder(encoded_out)
+        out = self.head(feature)
+        if self.mode == "feature":
+            return out, feature
+        return out
+
+class Modality_out(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x
+
+
+class GradMod(nn.Module):
+    def __init__(self, cfgs):
+        super().__init__()
+        self.mode = cfgs.mode
+        self.extract_mm_feature = False
+        if cfgs.fusion_type == 'late_fusion': #early
+            self.net = AV_Late_Classifier(cfgs)
+        elif cfgs.fusion_type == 'early_fusion':
+            self.net = AV_Early_Classifier(cfgs)
+        self.m_v = Modality_Visual()
+        self.m_a = Modality_Audio()
+        self.m_v_o = Modality_out()
+        self.m_a_o = Modality_out()
+
+        self.scale_a = 1.0
+        self.scale_v = 1.0
+
+        self.m_a_o.register_full_backward_hook(self.hooka)
+        self.m_v_o.register_full_backward_hook(self.hookv)
+
+    def hooka(self, m, ginp, gout):
+        gnew = ginp[0].clone()
+        return gnew * self.scale_a,
+
+    def hookv(self, m, ginp, gout):
+        gnew = ginp[0].clone()
+        return gnew * self.scale_v,
+
+    def update_scale(self, coeff_a, coeff_v):
+        self.scale_a = coeff_a
+        self.scale_v = coeff_v
+
+    def forward(self, audio, visual):
+        self.net.mode = "feature"
+        total_out, encoded_feature = self.net(audio, visual, pad_audio=False, pad_visual=False)
+        # print(f'2.1 cuda allocated: {torch.cuda.memory_allocated() // (1024 ** 3)} GB')
+
+        self.net.mode = "classify"
+        self.net.eval()
+        with torch.no_grad():
+            pad_visual_out = self.net(audio, visual, pad_audio=False, pad_visual=True)
+            pad_audio_out = self.net(audio, visual, pad_audio=True, pad_visual=False)
+            zero_padding_out = self.net(audio, visual, pad_audio=True, pad_visual=True)
+        # print(f'2.2 cuda allocated: {torch.cuda.memory_allocated() // (1024 ** 3)} GB')
+
+        if self.mode == "train":
+            self.net.train()
+        m_a = self.m_a_o(self.m_a(total_out, pad_visual_out, pad_audio_out))
+        m_v = self.m_v_o(self.m_v(total_out, pad_visual_out, pad_audio_out))
+        # print(f'2.3 cuda allocated: {torch.cuda.memory_allocated() // (1024 ** 3)} GB')
+
+        if self.extract_mm_feature is True:
+            return total_out, pad_visual_out, pad_audio_out, zero_padding_out, m_a + m_v, encoded_feature
+        return total_out, pad_visual_out, pad_audio_out, zero_padding_out, m_a + m_v
+    
+
