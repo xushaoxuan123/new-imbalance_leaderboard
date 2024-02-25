@@ -27,8 +27,8 @@ from train_model.MMCosine_train import MMCosine_main
 # from models.PMR.PMR_main import PMR_main
 from train_model.PMR_train import PMR_main
 # from models.CML.CML_main import CML_train_epoch, CML_valid
-from models.OGM.OGM_main import OGM_main
-from models.ACMo.ACMo_main import ACMo_main
+from train_model.OGM_train import OGM_main
+from train_model.AMCo_train import ACMo_main
 from train_model.GBlending_train import GBleding_main
 from utils.utils import get_logger
 from train_model.CML_train import CML_main
@@ -128,7 +128,7 @@ def main():
         from train_model.CKF_train import CKF_main
         CKF_main(args)
     if args.method == 'MSBD':
-        from models.MSBD.MSBD_main import MSBD_main
+        from train_model.MSBD_train import MSBD_main
         MSBD_main(args)
     if args.method == 'audio':
         from models.Uni_model.AV_train import train_main
